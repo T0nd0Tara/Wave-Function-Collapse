@@ -41,11 +41,11 @@ inline std::vector<T> uniun(std::vector<T> A, std::vector<T> B){
 class Cell{
     size_t m_id;
     std::vector<size_t> vConnect[4];
-    std::shared_ptr<olc::Sprite> m_sprite;
+    std::shared_ptr<olc::Decal> m_decal;
 public:
     Cell(size_t id, const std::string sprite_path): m_id(id){
         for (int i=0; i<4; i++) vConnect[i] = std::vector<size_t>();
-        m_sprite = std::make_shared<olc::Sprite>(sprite_path);
+        m_decal = std::make_shared<olc::Decal>(new olc::Sprite(sprite_path));
     }
     Cell(const Cell& cell){
         *this = cell;
@@ -61,14 +61,14 @@ public:
         if (!canConnect(id, dir))
             vConnect[dir].push_back(id);
     }
-    inline std::shared_ptr<olc::Sprite> sprite() const{
-        return m_sprite;
+    inline std::shared_ptr<olc::Decal> decal() const{
+        return m_decal;
     }
     Cell& operator = (const Cell& rhs){
         m_id = rhs.m_id;
          
         for (int i=0; i<4; i++) vConnect[i] = rhs.vConnect[i];
-        m_sprite = rhs.m_sprite;
+        m_decal = rhs.m_decal;
         return *this;
     }
 };
@@ -105,9 +105,9 @@ public:
     }
     
     std::vector<Cell> vCells;
-    olc::vi2d grid, sprite;
+    olc::vi2d grid, decal;
     GridCell** vGrid;
-    int scaler;
+    float scaler;
 
     float fFrameCounter;
     // every fFrameNext seconds the next iteration will be shown
@@ -133,7 +133,8 @@ public:
 public:
 	bool OnUserCreate() override
 	{
-        srand(time(NULL));
+        // TODO
+        srand(0);
         fFrameCounter = 0.0f;
 
 
@@ -221,26 +222,24 @@ public:
         }
         file.close();
        
-        sprite.x = vCells[0].sprite()->width;
-        sprite.y = vCells[0].sprite()->height;
+        decal.x = vCells[0].decal()->sprite->width;
+        decal.y = vCells[0].decal()->sprite->height;
 
-        // FIXME: scaler too small for some grids
-        int scaler_x = (float)ScreenWidth()  / float(sprite.x * grid.x);
-        int scaler_y = (float)ScreenHeight() / float(sprite.y * grid.y);
+        float scaler_x = (float)ScreenWidth()  / float(decal.x * grid.x);
+        float scaler_y = (float)ScreenHeight() / float(decal.y * grid.y);
         scaler = (scaler_x < scaler_y)? scaler_x : scaler_y;
+
 		return true;
 	}
 
 	bool OnUserUpdate(float fElapsedTime) override
 	{
-        if (bFinished){
-            std::chrono::milliseconds timespan(int(1000.0f/fMaxFPS));
-            std::this_thread::sleep_for(timespan);
-            return true;
-        }
-
+        auto start = std::chrono::steady_clock::now();
+        
         fFrameCounter += fElapsedTime;
         if (GetKey(olc::ESCAPE).bPressed) return false;
+        
+
 
         if (GetKey(olc::SHIFT).bPressed)  fFrameNext /= 4.0f;
         if (GetKey(olc::SHIFT).bReleased) fFrameNext *= 4.0f;
@@ -252,9 +251,21 @@ public:
                 assert(vGrid[y][x].vCanBe.size() > 0);
                 if (vGrid[y][x].vCanBe.size() == 1){
                     size_t i = vGrid[y][x].vCanBe[0];
-                    DrawSprite(x * sprite.x * scaler, y * sprite.y * scaler, vCells[i].sprite().get(), scaler);
+                    olc::vf2d pos{float(x*decal.x), float(y*decal.y)};
+                    DrawDecal(pos * scaler, vCells[i].decal().get(), olc::vf2d{scaler, scaler});
+                    // DrawRect(x * sprite.x * scaler, y * sprite.y * scaler, sprite.x * scaler, sprite.y * scaler);
                 }
             }
+        }
+
+        if (bFinished){
+            auto end = std::chrono::steady_clock::now();
+            size_t t = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+            if (t < size_t(1000.0f/fMaxFPS)){
+                std::chrono::milliseconds timespan(size_t(1000.0f/fMaxFPS) - t);
+                std::this_thread::sleep_for(timespan);
+            }
+            return true;
         }
 
         if (fFrameCounter < fFrameNext) return true;
@@ -279,6 +290,7 @@ public:
                 }
             }
         }
+        
         // we got to the end
         if (vMinCells.size() == 0){
             bFinished = true;
@@ -289,7 +301,8 @@ public:
         while (true){
             if (randCell->vCanBe.size() == 0){
                 std::cout << "Broken Rules" << std::endl;
-                while (true){}
+                bFinished = true;
+                return true;
             }
             size_t id = randCell->getRand();
 
