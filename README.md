@@ -10,28 +10,20 @@ $ ./run.sh
 ```
 
 ## rules.txt structures
-First line is the dimensions of the wanted grid seperated with a space
+First line is the dimensions of the wanted grid seperated with a space  
 ` 
 grid_x grid_y
 `
 
 ### set grid cells
-set cell 
-```
-s <x> <y> <cell_num>
-```
-set row 
-```
-sr <row_num> <cell_num>
-```
-set col
-```
-sc <col_num> <cell_num>
-```
+set cell: `s <x> <y> <cell_num>`  
+set row : `sr <row_num> <cell_num>`  
+set col : `sc <col_num> <cell_num>`  
 
 ### instructions
 To add a cell instruction first write the cell number
 And the next 4 lines should be the available connection types for [UP, RIGHT, DOWN, LEFT] in that order
+  
 For example the lines
 ```
 0
@@ -50,4 +42,5 @@ Each cell can connect to his neighbor if they have matching connection types
 
 ### comments
 Any line that starts with `\\ ` is a comment
+
 **CAUTION: The program will not see `\\ ` in a middle of a line!**
