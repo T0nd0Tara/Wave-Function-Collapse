@@ -40,34 +40,37 @@ inline std::vector<T> uniun(std::vector<T> A, std::vector<T> B){
 
 class Cell{
     size_t m_id;
-    std::vector<size_t> vConnect[4];
+    std::vector<size_t> m_vConTyp[4]; // availabe connection types for each direction
     std::shared_ptr<olc::Decal> m_decal;
 public:
     Cell(size_t id, const std::string sprite_path): m_id(id){
-        for (int i=0; i<4; i++) vConnect[i] = std::vector<size_t>();
         m_decal = std::make_shared<olc::Decal>(new olc::Sprite(sprite_path));
+        for (uint8_t dir=0; dir<4; dir++){
+            m_vConTyp[dir] = std::vector<size_t>();
+        }
     }
     Cell(const Cell& cell){
         *this = cell;
     }
     inline std::vector<size_t> getConnect(DIR d) const{
-        return vConnect[d];
+        return m_vConTyp[d];
     }
-
-    inline bool canConnect(size_t id, DIR dir){
-        return std::find(vConnect[dir].begin(), vConnect[dir].end(), id) != vConnect[dir].end();
+    inline size_t getId() const {
+        return m_id;
     }
-    void setConnect(size_t id, DIR dir){
-        if (!canConnect(id, dir))
-            vConnect[dir].push_back(id);
+    inline bool canConnect(size_t typ, DIR dir){
+        return std::find(m_vConTyp[dir].begin(), m_vConTyp[dir].end(), typ) != m_vConTyp[dir].end();
+    }
+    inline void setConnect(size_t typ, DIR dir){
+        if (!canConnect(typ, dir))
+            m_vConTyp[dir].push_back(typ);
     }
     inline std::shared_ptr<olc::Decal> decal() const{
         return m_decal;
     }
     Cell& operator = (const Cell& rhs){
         m_id = rhs.m_id;
-         
-        for (int i=0; i<4; i++) vConnect[i] = rhs.vConnect[i];
+        for (int i=0; i<4; i++) m_vConTyp[i] = rhs.m_vConTyp[i];
         m_decal = rhs.m_decal;
         return *this;
     }
@@ -112,8 +115,9 @@ public:
     float fFrameCounter;
     // every fFrameNext seconds the next iteration will be shown
     float fFrameNext = 0.01f;
-    size_t nFrameNr = 0; // TODO: remove this variable
-    
+    size_t nFrameNr = 0, nCellNr = 0; // TODO: remove this variable
+   
+
     bool bFinished = false;
     const float fMaxFPS = 30.0f;
 
@@ -133,8 +137,7 @@ public:
 public:
 	bool OnUserCreate() override
 	{
-        // TODO
-        srand(0);
+        srand(time(NULL));
         fFrameCounter = 0.0f;
 
 
@@ -177,7 +180,8 @@ public:
                         for (size_t i=0; i<vCells.size(); i++) this->vGrid[y][x].vCanBe.push_back(i);
                     }
                 }
-            }else if (line[0] == 's'){ // set command
+            }
+            else if (line[0] == 's'){ // set command
                 std::string s;
                 iss >> s;
                 if (s == "sr"){ // set row
@@ -207,16 +211,18 @@ public:
                 }
             }else{
                 int cell;
-                char d;
-                iss >> cell >> d;
-                while (true){
-                    size_t canBe;
-                    if (!(iss >> canBe)) break;
-                    vCells[cell].setConnect(canBe, ctodir(d));
-
-                    vCells[canBe].setConnect(cell, (DIR)(((int)ctodir(d) + 2) % 4));
+                iss >> cell;
+                for (uint8_t i=0; i<4; i++){
+                    do{
+                        std::getline(file, line);
+                        nLine++;
+                    }
+                    while (line.substr(0, 2) == "//" || line.empty()); 
+                    
+                    iss = std::istringstream(line);
+                    size_t typ;
+                    while (iss >> typ) vCells[cell].setConnect(typ, (DIR)i);
                 }
-                
             }
             nLine++;
         }
@@ -253,7 +259,6 @@ public:
                     size_t i = vGrid[y][x].vCanBe[0];
                     olc::vf2d pos{float(x*decal.x), float(y*decal.y)};
                     DrawDecal(pos * scaler, vCells[i].decal().get(), olc::vf2d{scaler, scaler});
-                    // DrawRect(x * sprite.x * scaler, y * sprite.y * scaler, sprite.x * scaler, sprite.y * scaler);
                 }
             }
         }
@@ -298,66 +303,119 @@ public:
         }
 
         GridCell* randCell = vMinCells[rand() % vMinCells.size()];
+       
+        std::vector<Cell*> vAvailCells;
+        for (auto& c : vCells)
+            vAvailCells.push_back(&c);
+        
         while (true){
             if (randCell->vCanBe.size() == 0){
                 std::cout << "Broken Rules" << std::endl;
                 bFinished = true;
                 return true;
             }
-            size_t id = randCell->getRand();
 
-            Cell& cell = vCells[id];
+            size_t id = rand() % vAvailCells.size();
+            Cell& cell = *vAvailCells[id];
             olc::vi2d& pos = randCell->pos;
             bool ok = true;
             // check up
             if (pos.y > 0){
-                std::vector<size_t> vUnion = uniun(vGrid[pos.y-1][pos.x].vCanBe, cell.getConnect(UP));
-                ok &= !vUnion.empty();
+                auto& vCanBe = vGrid[pos.y-1][pos.x].vCanBe;
+                if (std::all_of(vCanBe.begin(), vCanBe.end(), [&, this](int nOrtCell){
+                            Cell& ortCell = vCells[nOrtCell];
+                            return uniun(cell.getConnect(UP), ortCell.getConnect(DOWN)).empty();
+                        }))
+                    ok = false;
+                
             }
             // check right
-            if (pos.x+1 < grid.x){
-                std::vector<size_t> vUnion = uniun(vGrid[pos.y][pos.x+1].vCanBe, cell.getConnect(RIGHT));
-                ok &= !vUnion.empty();
+            if (pos.x+1 < grid.x && ok){
+                auto& vCanBe = vGrid[pos.y][pos.x+1].vCanBe;
+                if (std::all_of(vCanBe.begin(), vCanBe.end(), [&, this](int nOrtCell){
+                            Cell& ortCell = vCells[nOrtCell];
+                            return uniun(cell.getConnect(RIGHT), ortCell.getConnect(LEFT)).empty();
+                        }))
+                    ok = false;
             }
             // check down
-            if (pos.y+1 < grid.y){
-                std::vector<size_t> vUnion = uniun(vGrid[pos.y+1][pos.x].vCanBe, cell.getConnect(DOWN));
-                ok &= !vUnion.empty();
+            if (pos.y+1 < grid.y && ok){
+                auto& vCanBe = vGrid[pos.y+1][pos.x].vCanBe;
+                if (std::all_of(vCanBe.begin(), vCanBe.end(), [&, this](int nOrtCell){
+                            Cell& ortCell = vCells[nOrtCell];
+                            return uniun(cell.getConnect(DOWN), ortCell.getConnect(UP)).empty();
+                        }))
+                    ok = false;
             }
             // check left
-            if (pos.x > 0){
-                std::vector<size_t> vUnion = uniun(vGrid[pos.y][pos.x-1].vCanBe, cell.getConnect(LEFT));
-                ok &= !vUnion.empty();
+            if (pos.x > 0 && ok){
+                auto& vCanBe = vGrid[pos.y][pos.x-1].vCanBe;
+                if (std::all_of(vCanBe.begin(), vCanBe.end(), [&, this](int nOrtCell){
+                            Cell& ortCell = vCells[nOrtCell];
+                            return uniun(cell.getConnect(LEFT), ortCell.getConnect(RIGHT)).empty();
+                        }))
+                    ok = false;
             }
             if (!ok){
-                randCell->remove(id);
-                if (randCell->vCanBe.size() == 1) return true;
+                if (vAvailCells.size() == 1) return true;
+                vAvailCells.erase(vAvailCells.begin() + id);
                 continue;
             }
 
             // update up
             if (pos.y > 0){
-                std::vector<size_t> vUnion = uniun(vGrid[pos.y-1][pos.x].vCanBe, cell.getConnect(UP));
-                vGrid[pos.y-1][pos.x].vCanBe = vUnion;
+                auto& vCanBe = vGrid[pos.y-1][pos.x].vCanBe;
+                for (int i=0; i<(int)vCanBe.size(); i++){
+                    auto nOrtCell = vCanBe[i];
+                    Cell& ortCell = vCells[nOrtCell];
+                    if (uniun(cell.getConnect(UP), ortCell.getConnect(DOWN)).empty()){
+                        vCanBe.erase(vCanBe.begin() + i);
+                        i--;
+                    }
+                }
             }
+            
             // update right
-            if (pos.x+1 < grid.x){
-                std::vector<size_t> vUnion = uniun(vGrid[pos.y][pos.x+1].vCanBe, cell.getConnect(RIGHT));
-                vGrid[pos.y][pos.x+1].vCanBe = vUnion;
+            if (pos.x + 1 < grid.x){
+                auto& vCanBe = vGrid[pos.y][pos.x+1].vCanBe;
+                for (int i=0; i<(int)vCanBe.size(); i++){
+                    auto nOrtCell = vCanBe[i];
+                    Cell& ortCell = vCells[nOrtCell];
+                    if (uniun(cell.getConnect(RIGHT), ortCell.getConnect(LEFT)).empty()){
+                        vCanBe.erase(vCanBe.begin() + i);
+                        i--;
+                    }
+                }
             }
+
             // update down
-            if (pos.y+1 < grid.y){
-                std::vector<size_t> vUnion = uniun(vGrid[pos.y+1][pos.x].vCanBe, cell.getConnect(DOWN));
-                vGrid[pos.y+1][pos.x].vCanBe = vUnion;
+            if (pos.y + 1 < grid.y){
+                auto& vCanBe = vGrid[pos.y+1][pos.x].vCanBe;
+                for (int i=0; i<(int)vCanBe.size(); i++){
+                    auto nOrtCell = vCanBe[i];
+                    Cell& ortCell = vCells[nOrtCell];
+                    if (uniun(cell.getConnect(DOWN), ortCell.getConnect(UP)).empty()){
+                        vCanBe.erase(vCanBe.begin() + i);
+                        i--;
+                    }
+                }
             }
+            
             // update left
             if (pos.x > 0){
-                std::vector<size_t> vUnion = uniun(vGrid[pos.y][pos.x-1].vCanBe, cell.getConnect(LEFT));
-                vGrid[pos.y][pos.x-1].vCanBe = vUnion;
+                auto& vCanBe = vGrid[pos.y][pos.x-1].vCanBe;
+                for (int i=0; i<(int)vCanBe.size(); i++){
+                    auto nOrtCell = vCanBe[i];
+                    Cell& ortCell = vCells[nOrtCell];
+                    if (uniun(cell.getConnect(LEFT), ortCell.getConnect(RIGHT)).empty()){
+                        vCanBe.erase(vCanBe.begin() + i);
+                        i--;
+                    }
+                }
             }
         
             randCell->vCanBe.clear();
-            randCell->vCanBe.push_back(id);
+            randCell->vCanBe.push_back(cell.getId());
 
             break;
         }
