@@ -17,8 +17,8 @@ grid_x grid_y
 
 ### set grid cells
 set cell: `s <x> <y> <cell_num>`  
-set row : `sr <row_num> <cell_num>`  
-set col : `sc <col_num> <cell_num>`  
+set row: `sr <row_num> <cell_num>`  
+set col: `sc <col_num> <cell_num>`  
 
 ### instructions
 To add a cell instruction first write the cell number
