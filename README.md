@@ -16,12 +16,18 @@ grid_x grid_y
 `
 
 ### set grid cells
-set cell: `s <x> <y> <cell_num>
-`
-set row : `sr <row_num> <cell_num>
-`
-set col : `sc <col_num> <cell_num>
-`
+set cell 
+```
+s <x> <y> <cell_num>
+```
+set row 
+```
+sr <row_num> <cell_num>
+```
+set col
+```
+sc <col_num> <cell_num>
+```
 
 ### instructions
 To add a cell instruction first write the cell number
@@ -44,5 +50,4 @@ Each cell can connect to his neighbor if they have matching connection types
 
 ### comments
 Any line that starts with `\\ ` is a comment
-
 **CAUTION: The program will not see `\\ ` in a middle of a line!**
